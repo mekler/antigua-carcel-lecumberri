@@ -5,26 +5,160 @@ date: "September 22, 2018"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+# Librerías necesarias
+library(httr)
+library(stringr)
+library(purrr)
+library(tidyverse)
+require(jsonlite)
+library(tibble)
+library(plyr)
+library(tidyr)
+library(dplyr)
+library(knitr)
+library(ggplot2)
+library(plotly)
+library(RColorBrewer)
+library(readr)
+library(aws.s3)
+library(feather)
+library(readr)
+library(magrittr)
+library(scales)
+library(pdftools)
+library(readtext)
+library(lubridate)
+library(reshape)
 ```
 
-## R Markdown
+### Datos de Presos  1920 - 1976 
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+lecumberri_nombres <- read_tsv("./datos/ln.csv")
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+lecumberri_nombres <- lecumberri_nombres %>% 
+  select(-X1)
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+# lecumberri_nombres <- lecumberri_nombres %>% 
+#   filter(!is.na(Delito))
 
-```{r cars}
-summary(cars)
+lecumberri_nombres <- lecumberri_nombres %>% 
+  mutate(Caja = as.integer(Caja)) %>% 
+  mutate(Partida = as.integer(Partida)) %>% 
+  mutate(Año = as.integer(Año)) %>% 
+  mutate(Mes = as.integer(Mes)) %>% 
+  mutate(Día = as.integer(Día)) %>% 
+  mutate(Fojas = as.integer(Fojas)) 
+
+lecumberri_nombres <- lecumberri_nombres %>% 
+  filter(!is.na(Caja)) %>% 
+  filter(!is.na(Partida)) %>%
+  filter(!is.na(Año)) %>%
+  filter(!is.na(Mes)) %>%
+  filter(!is.na(Día)) %>%
+  filter(!is.na(Nombre)) %>%
+  filter(!is.na(Delito)) %>%
+  filter(!is.na(Fojas)) 
+
+lecumberri_nombres
 ```
 
-## Including Plots
 
-You can also embed plots, for example:
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+total_registros <- dim(lecumberri_nombres)[1]
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+nombres_unicos <- lecumberri_nombres$Nombre %>% unique() %>% length()
+
+nombres_unicos / total_registros 
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+lecumberri_nombres <- transform(lecumberri_nombres, nombre = colsplit(Nombre, split = ",", names = c("apellido", "nombre")))
+
+lecumberri_nombres <- lecumberri_nombres %>% 
+  mutate(Caja = as.integer(Caja)) %>% 
+  mutate(Partida = as.integer(Partida)) %>% 
+  mutate(Año = as.integer(Año)) %>% 
+  mutate(Mes = as.integer(Mes)) %>% 
+  mutate(Día = as.integer(Día)) %>% 
+  mutate(Fojas = as.integer(Fojas)) 
+
+lecumberri_nombres <- lecumberri_nombres %>% 
+  select(Caja, Partida, Año, Mes, Día, Nombre, nombre.apellido, nombre.nombre, Delito, Fojas)
+
+lecumberri_nombres
+```
+
+
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+# write.csv(lecumberri_nombres, file = "/home/valeria/data_jam/antigua-carcel-lecumberri/datos/lecumberri_nombre_clean.csv", row.names = FALSE)
+
+# lecumberri_nombres
+```
+
+
+### Datos Reos 1900 - 1918 
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+lecumberri_reos <- read_tsv("./datos/lr2.csv")
+
+lecumberri_reos <- lecumberri_reos[5:dim(lecumberri_reos) [1] , ]
+
+names(lecumberri_reos) <- c("data")
+
+lecumberri_reos_clean <- transform(lecumberri_reos, FOO = colsplit(data, split = "\\|", names = c("id","libro", "pagina", "partida", "fecha_ingreso", "nombre", "delitos")))
+
+           
+lecumberri_reos_clean <- lecumberri_reos_clean %>% 
+  select(-data)
+
+names(lecumberri_reos_clean) <- c("id", "libro", "pagina", "partida", "fecha_ingreso", "nombre", "delitos" )
+
+lecumberri_reos_clean <- lecumberri_reos_clean %>% 
+  mutate(id = as.integer(id)) %>% 
+  mutate(libro = as.integer(libro)) %>% 
+  mutate(pagina = as.integer(pagina)) %>% 
+  mutate(partida = as.integer(partida)) %>%
+  mutate(fecha_format = mdy(fecha_ingreso)) %>% 
+  mutate(nombre = as.character(nombre)) %>% 
+  mutate(delitos = as.character(delitos))
+
+lecumberri_reos_clean <- lecumberri_reos_clean %>% 
+  mutate(anio = year(fecha_format)) %>% 
+  mutate(mes = month(fecha_format)) %>%
+  mutate(dia_mes = day(fecha_format)) %>% 
+  mutate(dia_semana = wday(fecha_format, label = TRUE))
+
+
+# lecumberri_reos_clean <- transform(lecumberri_reos_clean, nombrer = colsplit(nombre, split = ",", names = c("apellido", "nombre")))
+
+
+lecumberri_reos_clean %>% 
+  arrange(id,libro,pagina,partida)
+```
+
+
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+reos_1910_1918 <- lecumberri_reos_clean$nombre %>% unique() %>% 
+  length()
+```
+
+
+```{r echo=FALSE, error=FALSE, message=FALSE, warning=FALSE}
+nom_apellido <- lecumberri_reos_clean %>% 
+  separate(nombre, c("nombre.apellido", "nombre.nombre"), sep = ",")
+
+nom_apellido <- nom_apellido %>% 
+  select(nombre.apellido, nombre.nombre )
+
+# nom_apellido
+
+lecumberri_reos_clean <- cbind(lecumberri_reos_clean, nom_apellido)
+lecumberri_reos_clean <- lecumberri_reos_clean %>% 
+  select(id, libro, pagina, partida, nombre, nombre.apellido, nombre.nombre, fecha_ingreso, fecha_format, anio, mes, dia_mes, dia_semana, delitos)
+
+lecumberri_reos_clean
+```
+
+
